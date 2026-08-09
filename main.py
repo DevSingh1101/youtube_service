@@ -1,17 +1,15 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI
 from sqlmodel import SQLModel
 from contextlib import asynccontextmanager
 
 from controller import user_router
-from core import DatabaseManager
-
+from core import DatabaseManager, configuration_manager
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    database_manager = DatabaseManager()
+    database_manager = DatabaseManager(configuration_manager.database_url)
     SQLModel.metadata.create_all(database_manager.engine)
     yield
-
 
 app = FastAPI(title="youtube-automation-service", lifespan=lifespan)
 
@@ -30,4 +28,4 @@ def health():
         "status": "ok",
     }
 
-app.include_router(user_router)
+app.include_router(user_router, tags=["user"])

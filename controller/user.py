@@ -7,18 +7,19 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from sqlmodel import Session, select
 
-from core import DatabaseManager, AuthManager
-
 from models import User
+from core import DatabaseManager, PasswordManager, TokenManager, configuration_manager
 from dto import UserResponse, UserSignupRequest, LogoutResponse, DeleteResponse
 
 user_router = APIRouter(prefix="/user", tags=["user"])
+
+token_manager: TokenManager = TokenManager(configuration_manager.secret_key, configuration_manager.encoding_algorithm)
 
 @user_router.post("/auth/signup", status_code=HTTPStatus.CREATED)
 def signup(
         user: UserSignupRequest,
         db: Session = Depends(DatabaseManager.get_session),
-        auth_manager = Depends(AuthManager)
+        auth_manager = Depends(PasswordManager)
 ) -> UserResponse:
     try:
         hashed_password = auth_manager.hash_password(user.password)
@@ -36,7 +37,7 @@ async def login(
         form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
         response: Response,
         db: Session = Depends(DatabaseManager.get_session),
-        auth_manager = Depends(AuthManager)
+        auth_manager: PasswordManager = Depends(PasswordManager)
 ) -> UserResponse:
     try:
         sql_query = select(User).where(User.username == form_data.username)
@@ -48,7 +49,9 @@ async def login(
         if not auth_manager.verify_password(form_data.password, user.hashed_password):
             raise HTTPException(status_code=400, detail="Incorrect password")
 
-        access_token = AuthManager.create_access_token(user_id=str(user.id), username=user.username, expires_at=timedelta(minutes=15))
+        access_token = token_manager.create_access_token(user_id=str(user.id),
+                                                        username=user.username,
+                                                        expires_at=timedelta(minutes=15))
 
         response.set_cookie(
             key="youtube_automation_access_token",
@@ -83,7 +86,7 @@ async def delete_user(
         )
 
     try:
-        payload = AuthManager.decode_access_token(access_token)
+        payload = token_manager.decode_access_token(access_token)
 
         if not payload or not payload.get("user_id"):
             raise HTTPException(
