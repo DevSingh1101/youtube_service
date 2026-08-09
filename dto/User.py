@@ -1,5 +1,7 @@
 from pydantic import BaseModel
 
+class MessageResponse(BaseModel):
+    message: str
 
 class ChannelResponse(BaseModel):
     name: str
@@ -17,3 +19,9 @@ class UserSignupRequest(BaseModel):
 class UserLoginRequest(BaseModel):
     username: str
     password: str
+
+class LogoutResponse(MessageResponse):
+    pass
+
+class DeleteResponse(MessageResponse, UserResponse):
+    pass
