@@ -16,14 +16,15 @@ user_router = APIRouter(prefix="/user", tags=["user"])
 token_manager: TokenManager = TokenManager(configuration_manager.secret_key, configuration_manager.encoding_algorithm)
 
 @user_router.post("/auth/signup", status_code=HTTPStatus.CREATED)
-def signup(
-        user: UserSignupRequest,
-        db: Session = Depends(DatabaseManager.get_session),
-        auth_manager = Depends(PasswordManager)
+async def signup(
+    user: UserSignupRequest,
+    db: Session = Depends(DatabaseManager.get_session),
+    auth_manager = Depends(PasswordManager)
 ) -> UserResponse:
     try:
-        hashed_password = auth_manager.hash_password(user.password)
-        new_user = User(name=user.name, username=user.username, hashed_password=hashed_password)
+        hashed_password: str = auth_manager.hash_password(user.password)
+        new_user: User = User(name=user.name, username=user.username, hashed_password=hashed_password)
+
         db.add(new_user)
         db.commit()
         db.refresh(new_user)
@@ -34,20 +35,20 @@ def signup(
 
 @user_router.post("/auth/login")
 async def login(
-        form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
-        response: Response,
-        db: Session = Depends(DatabaseManager.get_session),
-        auth_manager: PasswordManager = Depends(PasswordManager)
+    response: Response,
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    db: Session = Depends(DatabaseManager.get_session),
+    auth_manager: PasswordManager = Depends(PasswordManager)
 ) -> UserResponse:
     try:
         sql_query = select(User).where(User.username == form_data.username)
         user = db.exec(sql_query).first()
 
         if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+            raise HTTPException(status_code=404, detail="User not found, Please check your username or sign up first")
 
         if not auth_manager.verify_password(form_data.password, user.hashed_password):
-            raise HTTPException(status_code=400, detail="Incorrect password")
+            raise HTTPException(status_code=400, detail="Incorrect password, Please check your password and try again")
 
         access_token = token_manager.create_access_token(user_id=str(user.id),
                                                         username=user.username,
@@ -82,7 +83,7 @@ async def delete_user(
     if not access_token:
         raise HTTPException(
             status_code=HTTPStatus.UNAUTHORIZED,
-            detail="Authentication required",
+            detail="Login required to delete account",
         )
 
     try:
@@ -103,28 +104,24 @@ async def delete_user(
         if not user:
             raise HTTPException(
                 status_code=HTTPStatus.NOT_FOUND,
-                detail="User not found",
+                detail="User not found, Please check your sign up first",
             )
 
         db.delete(user)
         db.commit()
 
         return DeleteResponse(
-            message="Account deleted successfully",
+            message="Account deleted successfully, All the data associated with the account has been removed",
             id=user.id,
             name=user.name,
             username=user.username,
         )
-    except HTTPException:
-        db.rollback()
-        raise
-
     except Exception:
         db.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail="Failed to delete account",
+            detail="Failed to delete account due to an internal server error",
         )
     finally:
         response.delete_cookie(
