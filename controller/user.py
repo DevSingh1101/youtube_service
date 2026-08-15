@@ -11,11 +11,11 @@ from models import User
 from core import DatabaseManager, PasswordManager, TokenManager, configuration_manager
 from dto import UserResponse, UserSignupRequest, LogoutResponse, DeleteResponse
 
-user_router = APIRouter(prefix="/user", tags=["user"])
+user_router = APIRouter(prefix="/auth", tags=["auth"])
 
 token_manager: TokenManager = TokenManager(configuration_manager.secret_key, configuration_manager.encoding_algorithm)
 
-@user_router.post("/auth/signup", status_code=HTTPStatus.CREATED)
+@user_router.post("/signup", status_code=HTTPStatus.CREATED, response_model=UserResponse)
 async def signup(
     user: UserSignupRequest,
     db: Session = Depends(DatabaseManager.get_session),
@@ -33,7 +33,7 @@ async def signup(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@user_router.post("/auth/login")
+@user_router.post("/login", status_code=HTTPStatus.OK, response_model=UserResponse)
 async def login(
     response: Response,
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
@@ -66,13 +66,13 @@ async def login(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@user_router.delete("/auth/logout")
+@user_router.delete("/logout", status_code=HTTPStatus.OK, response_model=LogoutResponse)
 def logout(response: Response) -> LogoutResponse:
     response.delete_cookie(key="youtube_automation_access_token")
 
     return LogoutResponse(message="Successfully logged out")
 
-@user_router.delete("/auth/delete", response_model=DeleteResponse)
+@user_router.delete("/delete", status_code=HTTPStatus.OK, response_model=DeleteResponse)
 async def delete_user(
     request: Request,
     response: Response,
