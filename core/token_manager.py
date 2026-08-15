@@ -9,13 +9,13 @@ class TokenManager:
         self.secret_key = secret_key
         self.encoding_algorithm = encoding_algorithm
 
-    def create_access_token(self, user_id: str, username: str, expires_at: timedelta) -> str:
+    def create_access_token(self, user_id: str, email: str, expires_at: timedelta) -> str:
         now = datetime.now(timezone.utc)
 
         return jwt.encode(
             {
                 "user_id": user_id,
-                "user_name": username,
+                "email": email,
                 "exp": now + expires_at,
                 "iat": now,
                 "type": "access_token",

@@ -7,9 +7,9 @@ from fastapi.security import OAuth2PasswordRequestForm
 
 from sqlmodel import Session, select
 
-from models import User
+from models import User, UserBase
 from core import DatabaseManager, PasswordManager, TokenManager, configuration_manager
-from dto import UserResponse, UserSignupRequest, LogoutResponse, DeleteResponse
+from dto import UserResponse, UserLoginRequest, UserSignupRequest, LogoutResponse, DeleteResponse
 from utils.auth_utils import get_encoded_payload
 
 auth_router = APIRouter()
@@ -18,41 +18,41 @@ token_manager: TokenManager = TokenManager(configuration_manager.secret_key, con
 
 @auth_router.post("/signup", status_code=HTTPStatus.CREATED, response_model=UserResponse)
 async def signup(
-    user: UserSignupRequest,
+    user_request: UserSignupRequest,
     db: Session = Depends(DatabaseManager.get_session),
     auth_manager = Depends(PasswordManager)
 ) -> UserResponse:
     try:
-        hashed_password: str = auth_manager.hash_password(user.password)
-        new_user: User = User(name=user.name, username=user.username, hashed_password=hashed_password)
+        hashed_password: str = auth_manager.hash_password(user_request.password)
+        user: User = User(name=user_request.name, email=UserBase.validate_email(user_request.email), hashed_password=hashed_password)
 
-        db.add(new_user)
+        db.add(user)
         db.commit()
-        db.refresh(new_user)
+        db.refresh(user)
 
-        return UserResponse(id = new_user.id, name = new_user.name, username = new_user.username)
+        return UserResponse(id = user.id, name = user.name, email = user.email)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 @auth_router.post("/login", status_code=HTTPStatus.OK, response_model=UserResponse)
 async def login(
+    user_request: UserLoginRequest,
     response: Response,
-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     db: Session = Depends(DatabaseManager.get_session),
     auth_manager: PasswordManager = Depends(PasswordManager)
 ) -> UserResponse:
     try:
-        sql_query = select(User).where(User.username == form_data.username)
+        sql_query = select(User).where(User.email == user_request.email)
         user = db.exec(sql_query).first()
 
         if not user:
-            raise HTTPException(status_code=404, detail="User not found, Please check your username or sign up first")
+            raise HTTPException(status_code=404, detail="User not found, Please check your email or sign up first")
 
-        if not auth_manager.verify_password(form_data.password, user.hashed_password):
+        if not auth_manager.verify_password(user_request.password, user.hashed_password):
             raise HTTPException(status_code=400, detail="Incorrect password, Please check your password and try again")
 
         access_token = token_manager.create_access_token(user_id=str(user.id),
-                                                        username=user.username,
+                                                        email=user.email,
                                                         expires_at=timedelta(minutes=15))
 
         response.set_cookie(
@@ -63,7 +63,7 @@ async def login(
             samesite="lax"
         )
 
-        return UserResponse(id = user.id, name = user.name, username = user.username)
+        return UserResponse(id = user.id, name = user.name, email = user.email)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -99,7 +99,7 @@ async def delete_user(
             message="Account deleted successfully, All the data associated with the account has been removed",
             id=user.id,
             name=user.name,
-            username=user.username,
+            email=user.email,
         )
     except Exception:
         db.rollback()

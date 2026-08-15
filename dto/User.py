@@ -9,15 +9,15 @@ class ChannelResponse(BaseModel):
 class UserResponse(BaseModel):
     id: int
     name: str
-    username: str
+    email: str
 
 class UserSignupRequest(BaseModel):
     name: str
-    username: str
+    email: str
     password: str
 
 class UserLoginRequest(BaseModel):
-    username: str
+    email: str
     password: str
 
 class LogoutResponse(MessageResponse):
