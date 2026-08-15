@@ -1,6 +1,6 @@
 from datetime import timedelta
 from http import HTTPStatus
-from typing import Dict, Annotated
+from typing import  Annotated
 
 from fastapi import FastAPI, APIRouter, Cookie, Depends, HTTPException, Response, Request
 from fastapi.security import OAuth2PasswordRequestForm
@@ -10,12 +10,13 @@ from sqlmodel import Session, select
 from models import User
 from core import DatabaseManager, PasswordManager, TokenManager, configuration_manager
 from dto import UserResponse, UserSignupRequest, LogoutResponse, DeleteResponse
+from utils.auth_utils import get_encoded_payload
 
-user_router = APIRouter(prefix="/auth", tags=["auth"])
+auth_router = APIRouter()
 
 token_manager: TokenManager = TokenManager(configuration_manager.secret_key, configuration_manager.encoding_algorithm)
 
-@user_router.post("/signup", status_code=HTTPStatus.CREATED, response_model=UserResponse)
+@auth_router.post("/signup", status_code=HTTPStatus.CREATED, response_model=UserResponse)
 async def signup(
     user: UserSignupRequest,
     db: Session = Depends(DatabaseManager.get_session),
@@ -33,7 +34,7 @@ async def signup(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@user_router.post("/login", status_code=HTTPStatus.OK, response_model=UserResponse)
+@auth_router.post("/login", status_code=HTTPStatus.OK, response_model=UserResponse)
 async def login(
     response: Response,
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
@@ -66,39 +67,23 @@ async def login(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@user_router.delete("/logout", status_code=HTTPStatus.OK, response_model=LogoutResponse)
+@auth_router.delete("/logout", status_code=HTTPStatus.OK, response_model=LogoutResponse)
 def logout(response: Response) -> LogoutResponse:
     response.delete_cookie(key="youtube_automation_access_token")
 
     return LogoutResponse(message="Successfully logged out")
 
-@user_router.delete("/delete", status_code=HTTPStatus.OK, response_model=DeleteResponse)
+@auth_router.delete("/delete", status_code=HTTPStatus.OK, response_model=DeleteResponse)
 async def delete_user(
     request: Request,
     response: Response,
     db: Session = Depends(DatabaseManager.get_session),
 ) -> DeleteResponse:
-    access_token: str | None = request.cookies.get("youtube_automation_access_token")
-
-    if not access_token:
-        raise HTTPException(
-            status_code=HTTPStatus.UNAUTHORIZED,
-            detail="Login required to delete account",
-        )
-
     try:
-        payload = token_manager.decode_access_token(access_token)
-
-        if not payload or not payload.get("user_id"):
-            raise HTTPException(
-                status_code=HTTPStatus.UNAUTHORIZED,
-                detail="Invalid or expired access token",
-            )
-
-        user_id = payload["user_id"]
+        payload = get_encoded_payload(token_manager = token_manager, request = request, cookie_key = "youtube_automation_access_token", required_fields = ["user_id"])
 
         user = db.exec(
-            select(User).where(User.id == user_id)
+            select(User).where(User.id == payload["user_id"])
         ).first()
 
         if not user:
@@ -128,3 +113,4 @@ async def delete_user(
             key="youtube_automation_access_token",
             path="/",
         )
+

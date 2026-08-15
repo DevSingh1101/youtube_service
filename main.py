@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from sqlmodel import SQLModel
 from contextlib import asynccontextmanager
 
-from controller import user_router
+from controller import auth_router, dashboard_router
 from core import DatabaseManager, configuration_manager
 
 @asynccontextmanager
@@ -28,4 +28,5 @@ def health():
         "status": "ok",
     }
 
-app.include_router(user_router, tags=["user"])
+app.include_router(prefix="/auth", router=auth_router, tags=["auth"])
+app.include_router(prefix="/dashboard", router=dashboard_router, tags=["Dashboard"])
